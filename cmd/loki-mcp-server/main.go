@@ -31,7 +31,7 @@ func main() {
 
 	s := server.NewMCPServer(
 		"loki-mcp-server",
-		"0.1.0",
+		version,
 		server.WithToolCapabilities(false),
 	)
 
