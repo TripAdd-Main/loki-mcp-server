@@ -7,6 +7,7 @@ import (
 
 	"github.com/incu6us/loki-mcp-server/internal/loki"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 // mockClient implements loki.Client for testing.
@@ -200,4 +201,25 @@ func containsStr(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// TestToolMetadata guards the tool surface Glama and MCP clients read: every
+// tool must carry the read-only annotations and a description substantial
+// enough to state purpose, siblings and return shape.
+func TestToolMetadata(t *testing.T) {
+	client := &mockClient{}
+	for _, register := range []func(loki.Client) (mcp.Tool, server.ToolHandlerFunc){
+		NewQueryTool, NewQueryRangeTool, NewLabelsTool, NewLabelValuesTool, NewSeriesTool,
+	} {
+		tool, _ := register(client)
+		if tool.Annotations.ReadOnlyHint == nil || !*tool.Annotations.ReadOnlyHint {
+			t.Errorf("%s: missing ReadOnlyHint annotation", tool.Name)
+		}
+		if tool.Annotations.Title == "" {
+			t.Errorf("%s: missing Title annotation", tool.Name)
+		}
+		if len(tool.Description) < 200 {
+			t.Errorf("%s: description too thin (%d chars)", tool.Name, len(tool.Description))
+		}
+	}
 }

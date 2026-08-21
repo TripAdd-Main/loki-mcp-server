@@ -11,11 +11,16 @@ import (
 
 func NewQueryTool(client loki.Client) (mcp.Tool, server.ToolHandlerFunc) {
 	tool := mcp.NewTool("query",
-		mcp.WithDescription("Execute a LogQL instant query against Loki for point-in-time evaluation"),
-		mcp.WithString("query", mcp.Required(), mcp.Description("LogQL query expression")),
-		mcp.WithNumber("limit", mcp.Description("Maximum number of entries to return. Defaults to 100, max 5000")),
-		mcp.WithString("time", mcp.Description("Evaluation timestamp (RFC3339 or Unix nanoseconds). Defaults to now")),
-		mcp.WithString("direction", mcp.Description("Sort order: forward or backward. Defaults to backward")),
+		mcp.WithDescription(`Run a LogQL instant query against Loki, evaluating the expression at a single point in time.
+
+Use this for metric expressions (rate, count_over_time, sum by) when one value per series is enough, or for a quick "what is happening right now" check. To read log lines across a time window, use query_range instead. To discover which labels exist before writing a selector, use labels and label_values.
+
+Returns the raw Loki JSON response: {"status","data":{"resultType","result"}}, where resultType is "vector" for metric expressions and "streams" for log selectors. Read-only: it never writes to or mutates Loki.`),
+		mcp.WithString("query", mcp.Required(), mcp.Description(`LogQL expression. Metric example: sum(rate({app="nginx"} |= "error" [5m])). Log example: {app="nginx"} |= "error".`)),
+		mcp.WithNumber("limit", mcp.Description("Maximum log entries to return. Applies to log selectors only; metric expressions ignore it. Defaults to 100, must not exceed 5000.")),
+		mcp.WithString("time", mcp.Description("Evaluation timestamp, RFC3339 (2026-03-25T10:00:00Z) or Unix nanoseconds. Defaults to now.")),
+		mcp.WithString("direction", mcp.Enum("forward", "backward"), mcp.Description("Order of returned log entries: backward (newest first, the default) or forward (oldest first).")),
+		readOnlyTool("Loki instant query"),
 	)
 
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

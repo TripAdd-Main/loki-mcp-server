@@ -11,12 +11,17 @@ import (
 
 func NewQueryRangeTool(client loki.Client) (mcp.Tool, server.ToolHandlerFunc) {
 	tool := mcp.NewTool("query_range",
-		mcp.WithDescription("Execute a LogQL range query against Loki to fetch logs over a time window"),
-		mcp.WithString("query", mcp.Required(), mcp.Description("LogQL query expression")),
-		mcp.WithString("start", mcp.Description("Start of time range (RFC3339 or Unix nanoseconds). Defaults to 1 hour ago")),
-		mcp.WithString("end", mcp.Description("End of time range (RFC3339 or Unix nanoseconds). Defaults to now")),
-		mcp.WithNumber("limit", mcp.Description("Maximum number of entries to return. Defaults to 100, max 5000")),
-		mcp.WithString("direction", mcp.Description("Sort order: forward or backward. Defaults to backward")),
+		mcp.WithDescription(`Run a LogQL range query against Loki, returning results across a time window.
+
+This is the tool to reach for when reading logs: searching for errors, tailing a service over the last hour, or graphing a metric expression over time. Use query instead when a single point-in-time value is enough. If the selector is unknown, call labels and label_values first.
+
+Returns the raw Loki JSON response: {"status","data":{"resultType","result"}}, where resultType is "streams" for log selectors and "matrix" for metric expressions. Loki truncates at limit entries, so a full result set may mean logs were cut off; narrow start/end or tighten the selector rather than raising limit. Read-only: it never writes to or mutates Loki.`),
+		mcp.WithString("query", mcp.Required(), mcp.Description(`LogQL expression. Log example: {app="nginx"} |= "error" | json. Metric example: sum by (app) (rate({app="nginx"}[5m])).`)),
+		mcp.WithString("start", mcp.Description("Start of the time range, RFC3339 (2026-03-25T10:00:00Z) or Unix nanoseconds. Defaults to 1 hour ago.")),
+		mcp.WithString("end", mcp.Description("End of the time range, RFC3339 or Unix nanoseconds. Defaults to now.")),
+		mcp.WithNumber("limit", mcp.Description("Maximum log entries to return. Applies to log selectors only; metric expressions ignore it. Defaults to 100, must not exceed 5000.")),
+		mcp.WithString("direction", mcp.Enum("forward", "backward"), mcp.Description("Order of returned log entries: backward (newest first, the default) or forward (oldest first). With backward and a hit limit, you keep the newest entries.")),
+		readOnlyTool("Loki range query"),
 	)
 
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

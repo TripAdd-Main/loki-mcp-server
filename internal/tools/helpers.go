@@ -57,3 +57,17 @@ func jsonResult(v any) (*mcp.CallToolResult, error) {
 	}
 	return mcp.NewToolResultText(string(data)), nil
 }
+
+// readOnlyTool applies the annotations every tool here shares: each one only
+// reads from a remote Loki instance, so repeated calls are safe and nothing is
+// mutated.
+func readOnlyTool(title string) mcp.ToolOption {
+	return func(t *mcp.Tool) {
+		mcp.WithTitleAnnotation(title)(t)
+		mcp.WithReadOnlyHintAnnotation(true)(t)
+		// spec default is destructive; say otherwise or clients see a false positive
+		mcp.WithDestructiveHintAnnotation(false)(t)
+		mcp.WithIdempotentHintAnnotation(true)(t)
+		mcp.WithOpenWorldHintAnnotation(true)(t)
+	}
+}

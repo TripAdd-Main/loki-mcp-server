@@ -10,9 +10,14 @@ import (
 
 func NewLabelsTool(client loki.Client) (mcp.Tool, server.ToolHandlerFunc) {
 	tool := mcp.NewTool("labels",
-		mcp.WithDescription("List all available label names in Loki for building LogQL queries"),
-		mcp.WithString("start", mcp.Description("Start of time range (RFC3339 or Unix nanoseconds). Defaults to 6 hours ago")),
-		mcp.WithString("end", mcp.Description("End of time range (RFC3339 or Unix nanoseconds). Defaults to now")),
+		mcp.WithDescription(`List the label names Loki knows about in a time window.
+
+Start here when the log schema is unknown: labels gives the names (app, namespace, level), then label_values gives the values for one of them, and together they let you write a valid selector for query_range. Only labels present on streams that received data inside the window are returned, so widening start/end surfaces more.
+
+Returns the raw Loki JSON response: {"status","data":["label","names"]}. Read-only: it never writes to or mutates Loki.`),
+		mcp.WithString("start", mcp.Description("Start of the time range, RFC3339 (2026-03-25T10:00:00Z) or Unix nanoseconds. Defaults to 6 hours ago.")),
+		mcp.WithString("end", mcp.Description("End of the time range, RFC3339 or Unix nanoseconds. Defaults to now.")),
+		readOnlyTool("List Loki label names"),
 	)
 
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
