@@ -27,8 +27,25 @@ func main() {
 		logger.Fatalf("configuration error: %v", err)
 	}
 
-	lokiClient := loki.NewClient(cfg)
+	s := newMCPServer(loki.NewClient(cfg))
 
+	// ponytail: stdio stays the default. MCP_HTTP_ADDR opts into streamable HTTP so
+	// the same binary can sit behind a gateway, which needs an HTTPS URL and this
+	// transport. Stateless: no session state to lose across replicas.
+	if addr := os.Getenv("MCP_HTTP_ADDR"); addr != "" {
+		logger.Printf("streamable http listening on %s/mcp", addr)
+		if err := server.NewStreamableHTTPServer(s, server.WithStateLess(true)).Start(addr); err != nil {
+			logger.Fatalf("server error: %v", err)
+		}
+		return
+	}
+
+	if err := server.ServeStdio(s); err != nil {
+		logger.Fatalf("server error: %v", err)
+	}
+}
+
+func newMCPServer(client loki.Client) *server.MCPServer {
 	s := server.NewMCPServer(
 		"loki-mcp-server",
 		version,
@@ -42,11 +59,9 @@ func main() {
 		tools.NewLabelValuesTool,
 		tools.NewSeriesTool,
 	} {
-		tool, handler := register(lokiClient)
+		tool, handler := register(client)
 		s.AddTool(tool, handler)
 	}
 
-	if err := server.ServeStdio(s); err != nil {
-		logger.Fatalf("server error: %v", err)
-	}
+	return s
 }

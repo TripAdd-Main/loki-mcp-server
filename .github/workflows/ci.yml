@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: "stable"
-      - run: go test -race -coverprofile=coverage-unit.out -covermode=atomic ./internal/...
+      - run: go test -race -coverprofile=coverage-unit.out -covermode=atomic ./cmd/... ./internal/...
       - uses: actions/upload-artifact@v7
         with:
           name: coverage-unit

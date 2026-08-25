@@ -69,8 +69,27 @@ The server is configured entirely via environment variables, injected by the MCP
 | `LOKI_TLS_SKIP_VERIFY` | no | `false` | Skip TLS certificate verification |
 | `LOKI_TENANT_ID` | no | — | `X-Scope-OrgID` header for multi-tenant deployments |
 | `LOKI_HTTP_TIMEOUT` | no | `30s` | HTTP request timeout (Go duration, e.g. `10s`, `1m`) |
+| `MCP_HTTP_ADDR` | no | — | Listen address for the streamable HTTP transport, e.g. `:8080`. Unset means stdio |
 
 > **Note:** Basic auth (`LOKI_USERNAME`/`LOKI_PASSWORD`) and bearer token (`LOKI_BEARER_TOKEN`) are mutually exclusive.
+
+## Transports
+
+By default the server speaks MCP over stdio, which is what Claude Code, Claude Desktop
+and most local clients expect.
+
+Set `MCP_HTTP_ADDR` to serve the streamable HTTP transport instead, for running the
+server as a remote endpoint behind a proxy or gateway:
+
+```bash
+LOKI_URL=http://loki:3100 MCP_HTTP_ADDR=:8080 loki-mcp-server
+# MCP endpoint: http://localhost:8080/mcp
+```
+
+The HTTP mode is stateless, so it can run behind a load balancer with several replicas.
+It carries no authentication of its own — put it behind TLS and an authenticating proxy
+before exposing it, and remember that whoever reaches the endpoint can read every log
+line the configured `LOKI_URL` credentials can see.
 
 ## Usage with Claude Code
 
