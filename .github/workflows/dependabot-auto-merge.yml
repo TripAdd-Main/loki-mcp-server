@@ -1,0 +1,27 @@
+name: Dependabot auto-merge
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      # ponytail: no checkout on purpose. pull_request_target hands out a write
+      # token, so the untrusted PR branch must never be checked out here.
+      - uses: dependabot/fetch-metadata@v2
+        id: meta
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Majors keep a human in the loop: goreleaser or setup-go crossing a major
+      # is how a release pipeline breaks silently.
+      - if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
