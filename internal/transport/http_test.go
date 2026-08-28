@@ -1,20 +1,23 @@
-package main
+package transport
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
 // TestHealthz covers the monitoring contract: a probe gets 200 and a JSON body
 // naming the running version, without any Loki call.
 func TestHealthz(t *testing.T) {
-	mux := newHTTPHandler(http.NotFoundHandler())
+	mux := newHandler(http.NotFoundHandler(), "1.2.3")
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, healthzPath, nil))
@@ -33,15 +36,15 @@ func TestHealthz(t *testing.T) {
 	if body.Status != "ok" {
 		t.Errorf("status %q, want ok", body.Status)
 	}
-	if body.Version != version {
-		t.Errorf("version %q, want %q", body.Version, version)
+	if body.Version != "1.2.3" {
+		t.Errorf("version %q, want 1.2.3", body.Version)
 	}
 }
 
 // TestHealthzMethods: probes that use HEAD must work too, and anything that
 // writes is rejected rather than silently treated as a probe.
 func TestHealthzMethods(t *testing.T) {
-	mux := newHTTPHandler(http.NotFoundHandler())
+	mux := newHandler(http.NotFoundHandler(), "dev")
 
 	for _, tc := range []struct {
 		method string
@@ -59,33 +62,54 @@ func TestHealthzMethods(t *testing.T) {
 	}
 }
 
-// TestHTTPHandlerRouting guards the wiring main() builds: /healthz must not
+// TestStartHTTPListenError: a listen address that cannot be bound has to surface
+// as an error rather than a silent no-op, since main() exits on it.
+func TestStartHTTPListenError(t *testing.T) {
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = occupied.Close() }()
+
+	if err := StartHTTP(server.NewMCPServer("test", "1.2.3"), occupied.Addr().String(), "1.2.3"); err == nil {
+		t.Error("StartHTTP on an occupied port returned nil, want an error")
+	}
+}
+
+// TestHandlerRouting guards the wiring StartHTTP builds: /healthz must not
 // shadow the MCP endpoint, and unknown paths stay 404.
-func TestHTTPHandlerRouting(t *testing.T) {
-	ts := httptest.NewServer(newHTTPHandler(server.NewStreamableHTTPServer(
-		newMCPServer(stubClient{}),
-		server.WithStateLess(true),
-	)))
+func TestHandlerRouting(t *testing.T) {
+	mcpServer := server.NewMCPServer("test", "1.2.3")
+	mcpServer.AddTool(
+		mcp.NewTool("ping"),
+		func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return mcp.NewToolResultText("pong"), nil
+		},
+	)
+
+	ts := httptest.NewServer(newHandler(
+		server.NewStreamableHTTPServer(mcpServer, server.WithStateLess(true)),
+		"1.2.3",
+	))
 	defer ts.Close()
 
-	get := func(path string) (int, []byte) {
+	get := func(path string) int {
 		t.Helper()
 		resp, err := http.Get(ts.URL + path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer func() { _ = resp.Body.Close() }()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 			t.Fatal(err)
 		}
-		return resp.StatusCode, body
+		return resp.StatusCode
 	}
 
-	if code, _ := get(healthzPath); code != http.StatusOK {
+	if code := get(healthzPath); code != http.StatusOK {
 		t.Errorf("%s: status %d, want %d", healthzPath, code, http.StatusOK)
 	}
-	if code, _ := get("/nope"); code != http.StatusNotFound {
+	if code := get("/nope"); code != http.StatusNotFound {
 		t.Errorf("/nope: status %d, want %d", code, http.StatusNotFound)
 	}
 
@@ -108,13 +132,15 @@ func TestHTTPHandlerRouting(t *testing.T) {
 
 	var out struct {
 		Result struct {
-			Tools []any `json:"tools"`
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
 		} `json:"result"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if got := len(out.Result.Tools); got != 5 {
-		t.Errorf("got %d tools, want 5", got)
+	if len(out.Result.Tools) != 1 || out.Result.Tools[0].Name != "ping" {
+		t.Errorf("%s: tools %+v, want [ping]", mcpPath, out.Result.Tools)
 	}
 }
