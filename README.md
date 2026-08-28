@@ -69,7 +69,7 @@ The server is configured entirely via environment variables, injected by the MCP
 | `LOKI_TLS_SKIP_VERIFY` | no | `false` | Skip TLS certificate verification |
 | `LOKI_TENANT_ID` | no | — | `X-Scope-OrgID` header for multi-tenant deployments |
 | `LOKI_HTTP_TIMEOUT` | no | `30s` | HTTP request timeout (Go duration, e.g. `10s`, `1m`) |
-| `MCP_HTTP_ADDR` | no | — | Listen address for the streamable HTTP transport, e.g. `:8080`. Unset means stdio |
+| `MCP_HTTP_ADDR` | no | — | Listen address for the streamable HTTP transport and `/healthz`, e.g. `:8080`. Unset means stdio |
 
 > **Note:** Basic auth (`LOKI_USERNAME`/`LOKI_PASSWORD`) and bearer token (`LOKI_BEARER_TOKEN`) are mutually exclusive.
 
@@ -83,13 +83,54 @@ server as a remote endpoint behind a proxy or gateway:
 
 ```bash
 LOKI_URL=http://loki:3100 MCP_HTTP_ADDR=:8080 loki-mcp-server
-# MCP endpoint: http://localhost:8080/mcp
+# MCP endpoint:    http://localhost:8080/mcp
+# Health endpoint: http://localhost:8080/healthz
 ```
 
 The HTTP mode is stateless, so it can run behind a load balancer with several replicas.
 It carries no authentication of its own — put it behind TLS and an authenticating proxy
 before exposing it, and remember that whoever reaches the endpoint can read every log
 line the configured `LOKI_URL` credentials can see.
+
+### Health check
+
+`GET /healthz` (also `HEAD`; other methods get `405`) is served on the same listener
+whenever `MCP_HTTP_ADDR` is set, and answers `200` with:
+
+```json
+{"status":"ok","version":"1.2.3"}
+```
+
+This is a **liveness** check: it reports that the process is up and serving, and
+deliberately does not query Loki. A probe that went red during a Loki outage would have
+your orchestrator restart a healthy process over an upstream problem, and every monitor
+polling it would add load to Loki. Whether Loki is reachable is what the tools report.
+
+Like `/mcp`, it is unauthenticated and exposes the server version, so keep it behind the
+same proxy.
+
+Kubernetes:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+```
+
+Docker Compose:
+
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/healthz || exit 1"]
+  interval: 10s
+  timeout: 3s
+  retries: 3
+```
 
 ## Usage with Claude Code
 

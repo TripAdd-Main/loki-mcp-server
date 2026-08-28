@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/incu6us/loki-mcp-server/internal/config"
@@ -33,8 +34,17 @@ func main() {
 	// the same binary can sit behind a gateway, which needs an HTTPS URL and this
 	// transport. Stateless: no session state to lose across replicas.
 	if addr := os.Getenv("MCP_HTTP_ADDR"); addr != "" {
-		logger.Printf("streamable http listening on %s/mcp", addr)
-		if err := server.NewStreamableHTTPServer(s, server.WithStateLess(true)).Start(addr); err != nil {
+		// ponytail: the transport still owns the listener, but the mux is ours, so
+		// /healthz shares the one port MCP_HTTP_ADDR opens instead of needing a second.
+		httpServer := &http.Server{}
+		streamable := server.NewStreamableHTTPServer(s,
+			server.WithStateLess(true),
+			server.WithStreamableHTTPServer(httpServer),
+		)
+		httpServer.Handler = newHTTPHandler(streamable)
+
+		logger.Printf("streamable http listening on %s (mcp: %s, health: %s)", addr, mcpPath, healthzPath)
+		if err := streamable.Start(addr); err != nil {
 			logger.Fatalf("server error: %v", err)
 		}
 		return
