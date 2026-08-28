@@ -1,0 +1,12 @@
+.git
+.github
+deploy
+docs
+tests
+*.md
+Dockerfile
+.dockerignore
+.golangci.yml
+.goreleaser.yml
+Makefile
+loki-mcp-server
