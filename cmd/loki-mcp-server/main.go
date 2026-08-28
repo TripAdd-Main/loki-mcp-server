@@ -35,7 +35,7 @@ func main() {
 	// transport. Stateless: no session state to lose across replicas.
 	if addr := os.Getenv("MCP_HTTP_ADDR"); addr != "" {
 		logger.Printf("streamable http listening on %s/mcp", addr)
-		if err := transport.StartHTTP(s, addr, version); err != nil {
+		if err := transport.StartHTTP(s, addr); err != nil {
 			logger.Fatalf("server error: %v", err)
 		}
 		return

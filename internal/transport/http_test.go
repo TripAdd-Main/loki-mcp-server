@@ -15,9 +15,9 @@ import (
 )
 
 // TestHealthz covers the monitoring contract: a probe gets 200 and a JSON body
-// naming the running version, without any Loki call.
+// saying so, without any Loki call.
 func TestHealthz(t *testing.T) {
-	mux := newHandler(http.NotFoundHandler(), "1.2.3")
+	mux := newHandler(http.NotFoundHandler())
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, healthzPath, nil))
@@ -29,22 +29,21 @@ func TestHealthz(t *testing.T) {
 		t.Errorf("Content-Type %q, want application/json", got)
 	}
 
-	var body healthResponse
+	var body struct {
+		Status string `json:"status"`
+	}
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decoding body: %v", err)
 	}
 	if body.Status != "ok" {
 		t.Errorf("status %q, want ok", body.Status)
 	}
-	if body.Version != "1.2.3" {
-		t.Errorf("version %q, want 1.2.3", body.Version)
-	}
 }
 
 // TestHealthzMethods: probes that use HEAD must work too, and anything that
 // writes is rejected rather than silently treated as a probe.
 func TestHealthzMethods(t *testing.T) {
-	mux := newHandler(http.NotFoundHandler(), "dev")
+	mux := newHandler(http.NotFoundHandler())
 
 	for _, tc := range []struct {
 		method string
@@ -71,7 +70,7 @@ func TestStartHTTPListenError(t *testing.T) {
 	}
 	defer func() { _ = occupied.Close() }()
 
-	if err := StartHTTP(server.NewMCPServer("test", "1.2.3"), occupied.Addr().String(), "1.2.3"); err == nil {
+	if err := StartHTTP(server.NewMCPServer("test", "1.2.3"), occupied.Addr().String()); err == nil {
 		t.Error("StartHTTP on an occupied port returned nil, want an error")
 	}
 }
@@ -89,7 +88,6 @@ func TestHandlerRouting(t *testing.T) {
 
 	ts := httptest.NewServer(newHandler(
 		server.NewStreamableHTTPServer(mcpServer, server.WithStateLess(true)),
-		"1.2.3",
 	))
 	defer ts.Close()
 
