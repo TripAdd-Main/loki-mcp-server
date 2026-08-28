@@ -1,12 +1,6 @@
-.git
-.github
-deploy
-docs
-tests
-*.md
-Dockerfile
-.dockerignore
-.golangci.yml
-.goreleaser.yml
-Makefile
-loki-mcp-server
+# Whitelist: only what `go build ./cmd/loki-mcp-server` needs.
+*
+!go.mod
+!go.sum
+!cmd
+!internal
