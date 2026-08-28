@@ -8,6 +8,7 @@ import (
 	"github.com/incu6us/loki-mcp-server/internal/config"
 	"github.com/incu6us/loki-mcp-server/internal/loki"
 	"github.com/incu6us/loki-mcp-server/internal/tools"
+	"github.com/incu6us/loki-mcp-server/internal/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -34,7 +35,7 @@ func main() {
 	// transport. Stateless: no session state to lose across replicas.
 	if addr := os.Getenv("MCP_HTTP_ADDR"); addr != "" {
 		logger.Printf("streamable http listening on %s/mcp", addr)
-		if err := server.NewStreamableHTTPServer(s, server.WithStateLess(true)).Start(addr); err != nil {
+		if err := transport.StartHTTP(s, addr); err != nil {
 			logger.Fatalf("server error: %v", err)
 		}
 		return
