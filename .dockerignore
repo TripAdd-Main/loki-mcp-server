@@ -1,0 +1,6 @@
+# Whitelist: only what `go build ./cmd/loki-mcp-server` needs.
+*
+!go.mod
+!go.sum
+!cmd
+!internal
